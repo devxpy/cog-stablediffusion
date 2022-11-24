@@ -45,7 +45,7 @@ def load_model_from_config(config, ckpt, verbose=False):
     return model
 
 
-def parse_args():
+def parse_args(args=None):
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--prompt",
@@ -171,7 +171,7 @@ def parse_args():
         default=1,
         help="repeat each prompt in file this often",
     )
-    opt = parser.parse_args()
+    opt = parser.parse_args(args)
     return opt
 
 
@@ -184,7 +184,11 @@ def put_watermark(img, wm_encoder=None):
 
 
 def main(opt):
-    seed_everything(opt.seed)
+    models_dict = load_models(opt)
+    run_models(opt, **models_dict)
+
+def load_models(opt):
+    global model, sampler
 
     config = OmegaConf.load(f"{opt.config}")
     model = load_model_from_config(config, f"{opt.ckpt}")
@@ -198,6 +202,13 @@ def main(opt):
         sampler = DPMSolverSampler(model)
     else:
         sampler = DDIMSampler(model)
+
+    return {"model": model, "sampler": sampler}
+
+
+def run_models(opt, model, sampler):
+    seed_everything(opt.seed)
+    device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
     os.makedirs(opt.outdir, exist_ok=True)
     outpath = opt.outdir
@@ -268,17 +279,17 @@ def main(opt):
 
                     all_samples.append(x_samples)
 
-            # additionally, save as grid
-            grid = torch.stack(all_samples, 0)
-            grid = rearrange(grid, 'n b c h w -> (n b) c h w')
-            grid = make_grid(grid, nrow=n_rows)
-
-            # to image
-            grid = 255. * rearrange(grid, 'c h w -> h w c').cpu().numpy()
-            grid = Image.fromarray(grid.astype(np.uint8))
-            grid = put_watermark(grid, wm_encoder)
-            grid.save(os.path.join(outpath, f'grid-{grid_count:04}.png'))
-            grid_count += 1
+            # # additionally, save as grid
+            # grid = torch.stack(all_samples, 0)
+            # grid = rearrange(grid, 'n b c h w -> (n b) c h w')
+            # grid = make_grid(grid, nrow=n_rows)
+            #
+            # # to image
+            # grid = 255. * rearrange(grid, 'c h w -> h w c').cpu().numpy()
+            # grid = Image.fromarray(grid.astype(np.uint8))
+            # grid = put_watermark(grid, wm_encoder)
+            # grid.save(os.path.join(outpath, f'grid-{grid_count:04}.png'))
+            # grid_count += 1
 
     print(f"Your samples are ready and waiting for you here: \n{outpath} \n"
           f" \nEnjoy.")

@@ -59,6 +59,12 @@ def load_img(path):
 
 
 def main():
+    opt = parse_args()
+    models_dict = load_models(opt)
+    run_models(opt, **models_dict)
+
+
+def parse_args(args=None):
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
@@ -181,9 +187,11 @@ def main():
         default="autocast"
     )
 
-    opt = parser.parse_args()
-    seed_everything(opt.seed)
+    opt = parser.parse_args(args)
+    return opt
 
+
+def load_models(opt):
     config = OmegaConf.load(f"{opt.config}")
     model = load_model_from_config(config, f"{opt.ckpt}")
 
@@ -191,6 +199,13 @@ def main():
     model = model.to(device)
 
     sampler = DDIMSampler(model)
+
+    return {"model": model, "sampler": sampler}
+
+
+def run_models(opt, model, sampler):
+    seed_everything(opt.seed)
+    device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
     os.makedirs(opt.outdir, exist_ok=True)
     outpath = opt.outdir
@@ -261,16 +276,16 @@ def main():
                         all_samples.append(x_samples)
 
                 # additionally, save as grid
-                grid = torch.stack(all_samples, 0)
-                grid = rearrange(grid, 'n b c h w -> (n b) c h w')
-                grid = make_grid(grid, nrow=n_rows)
-
-                # to image
-                grid = 255. * rearrange(grid, 'c h w -> h w c').cpu().numpy()
-                grid = Image.fromarray(grid.astype(np.uint8))
-                grid = put_watermark(grid, wm_encoder)
-                grid.save(os.path.join(outpath, f'grid-{grid_count:04}.png'))
-                grid_count += 1
+                # grid = torch.stack(all_samples, 0)
+                # grid = rearrange(grid, 'n b c h w -> (n b) c h w')
+                # grid = make_grid(grid, nrow=n_rows)
+                #
+                # # to image
+                # grid = 255. * rearrange(grid, 'c h w -> h w c').cpu().numpy()
+                # grid = Image.fromarray(grid.astype(np.uint8))
+                # grid = put_watermark(grid, wm_encoder)
+                # grid.save(os.path.join(outpath, f'grid-{grid_count:04}.png'))
+                # grid_count += 1
 
     print(f"Your samples are ready and waiting for you here: \n{outpath} \nEnjoy.")
 
