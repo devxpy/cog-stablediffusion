@@ -8,17 +8,18 @@ import typing
 from PIL import Image, ImageOps
 from cog import BasePredictor, Path, File
 
-from scripts import txt2img, img2img
-from scripts.gradio import inpainting
-
 
 class Predictor(BasePredictor):
     models = {}
     inpainting_models = {}
+    upscaling_models = {}
 
     def _setup(self):
         """Load the model into memory to make running multiple predictions efficient"""
         print("running setup...")
+
+        from scripts import txt2img, img2img
+        from scripts.gradio import inpainting, superresolution
 
         self.models["model"] = txt2img.load_models(
             txt2img.parse_args([
@@ -33,8 +34,16 @@ class Predictor(BasePredictor):
         )
         self.inpainting_models["model"] = inpainting.sampler.model
 
+        superresolution.sampler = superresolution.initialize_model(
+            config="configs/stable-diffusion/x4-upscaling.yaml",
+            ckpt="checkpoints/x4-upscaler-ema.ckpt"
+        )
+        self.upscaling_models["model"] = superresolution.sampler.model
+
         move_models(self.models, "cpu")
         move_models(self.inpainting_models, "cpu")
+        move_models(self.upscaling_models, "cpu")
+
 
     def predict(
         self,
@@ -50,8 +59,12 @@ class Predictor(BasePredictor):
         edit_image: Path = None,
         mask_image: Path = None,
         sampler: str = "ddim",
+        upscaling_inference_steps: int = 0,
     ) -> typing.List[File]:
         """Run a single prediction on the model"""
+
+        from scripts import txt2img, img2img
+        from scripts.gradio import inpainting, superresolution
 
         if not self.models:
             self._setup()
@@ -69,9 +82,9 @@ class Predictor(BasePredictor):
                     },
                     prompt=prompt,
                     ddim_steps=num_inference_steps,
+                    num_samples=num_outputs,
                     scale=guidance_scale,
                     seed=seed,
-                    num_samples=num_outputs,
                 )
         else:
             args = [
@@ -82,7 +95,6 @@ class Predictor(BasePredictor):
                 "--n_samples", str(num_outputs),
                 "--scale", str(guidance_scale),
                 "--seed", str(seed),
-                # "--outdir", "outputs/",
             ]
 
             if sampler == "plms":
@@ -110,6 +122,22 @@ class Predictor(BasePredictor):
             print("running with args:", " ".join(map(str, args)))
             with models_in_gpu(self.models):
                 results = module.run_models(module.parse_args(args), **self.models)
+
+        if upscaling_inference_steps:
+            with models_in_gpu(self.upscaling_models):
+                results = [
+                    superresolution.predict(
+                        input_image=input_image,
+                        prompt=prompt,
+                        steps=upscaling_inference_steps,
+                        num_samples=num_outputs,
+                        scale=guidance_scale,
+                        seed=seed,
+                        eta=0,
+                        noise_level=20,
+                    )[0]
+                    for input_image in results
+                ]
 
         ret = []
         for img in results:
