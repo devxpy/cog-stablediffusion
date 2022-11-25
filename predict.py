@@ -1,26 +1,40 @@
 # Prediction interface for Cog ⚙️
 # https://github.com/replicate/cog/blob/main/docs/python.md
+import io
 import os
 import shutil
-
 import typing
-from glob import glob
 
-from cog import BasePredictor, Input, Path
+from PIL import Image, ImageOps
+from cog import BasePredictor, Path, File
+
 from scripts import txt2img, img2img
+from scripts.gradio import inpainting
 
 
 class Predictor(BasePredictor):
-    models_dict = {}
+    models = {}
+    inpainting_models = {}
 
     def _setup(self):
         """Load the model into memory to make running multiple predictions efficient"""
-        self.models_dict = txt2img.load_models(
-            txt2img.parse_args(
-                ["--ckpt", "checkpoints/768-v-ema.ckpt", "--config", "configs/stable-diffusion/v2-inference-v.yaml"]
-            )
+        print("running setup...")
+
+        self.models["model"] = txt2img.load_models(
+            txt2img.parse_args([
+                "--ckpt", "checkpoints/768-v-ema.ckpt",
+                "--config", "configs/stable-diffusion/v2-inference-v.yaml"
+            ])
         )
-        move_models(self.models_dict, "cpu")
+
+        inpainting.sampler = inpainting.initialize_model(
+            config="configs/stable-diffusion/v2-inpainting-inference.yaml",
+            ckpt="checkpoints/512-inpainting-ema.ckpt"
+        )
+        self.inpainting_models["model"] = inpainting.sampler.model
+
+        move_models(self.models, "cpu")
+        move_models(self.inpainting_models, "cpu")
 
     def predict(
         self,
@@ -33,44 +47,76 @@ class Predictor(BasePredictor):
         strength: float = 0.8,
         seed: int = None,
         init_image: Path = None,
-    ) -> typing.List[Path]:
+        edit_image: Path = None,
+        mask_image: Path = None,
+        sampler: str = "ddim",
+    ) -> typing.List[File]:
         """Run a single prediction on the model"""
 
-        if not self.models_dict:
+        if not self.models:
             self._setup()
 
-        if seed is None:
+        if not seed:
             seed = int.from_bytes(os.urandom(2), "big")
         print(f"Using seed: {seed}")
 
-        args = [
-            "--ckpt", "checkpoints/768-v-ema.ckpt",
-            "--config", "configs/stable-diffusion/v2-inference-v.yaml",
-            "--prompt", prompt,
-            "--W", str(width),
-            "--H", str(height),
-            "--steps", str(num_inference_steps),
-            "--n_iter", "1",
-            "--n_samples", str(num_outputs),
-            "--scale", str(guidance_scale),
-            "--seed", str(seed),
-            "--outdir", "outputs/",
-        ]
-        if init_image:
-            args += [
-                "--init-img", str(init_image),
-                "--strength", str(strength),
-            ]
-            module = img2img
+        if edit_image:
+            with models_in_gpu(self.inpainting_models):
+                results = inpainting.predict(
+                    input_image={
+                        "image": Image.open(edit_image),
+                        "mask": ImageOps.invert(Image.open(mask_image)),
+                    },
+                    prompt=prompt,
+                    ddim_steps=num_inference_steps,
+                    scale=guidance_scale,
+                    seed=seed,
+                    num_samples=num_outputs,
+                )
         else:
-            module = txt2img
+            args = [
+                "--ckpt", "checkpoints/768-v-ema.ckpt",
+                "--config", "configs/stable-diffusion/v2-inference-v.yaml",
+                "--prompt", prompt,
+                "--n_iter", "1",
+                "--n_samples", str(num_outputs),
+                "--scale", str(guidance_scale),
+                "--seed", str(seed),
+                # "--outdir", "outputs/",
+            ]
 
-        shutil.rmtree('outputs/', ignore_errors=True)
+            if sampler == "plms":
+                args += ["--plms"]
+            elif sampler == "dpm":
+                args += ["--dpm"]
 
-        with models_in_gpu(self.models_dict):
-            module.run_models(module.parse_args(args), **self.models_dict)
+            if init_image:
+                args += [
+                    "--init-img", str(init_image),
+                    "--strength", str(strength),
+                    "--ddim_steps", str(num_inference_steps),
+                ]
+                module = img2img
+            else:
+                args += [
+                    "--W", str(width),
+                    "--H", str(height),
+                    "--steps", str(num_inference_steps),
+                ]
+                module = txt2img
 
-        return [Path(path) for path in glob("outputs/samples/*.png")]
+            shutil.rmtree('outputs/', ignore_errors=True)
+
+            print("running with args:", " ".join(map(str, args)))
+            with models_in_gpu(self.models):
+                results = module.run_models(module.parse_args(args), **self.models)
+
+        ret = []
+        for img in results:
+            f = io.BytesIO()
+            img.save(f, format='PNG')
+            ret.append(f)
+        return ret
 
 
 import torch

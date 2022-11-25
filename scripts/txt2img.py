@@ -184,8 +184,8 @@ def put_watermark(img, wm_encoder=None):
 
 
 def main(opt):
-    models_dict = load_models(opt)
-    run_models(opt, **models_dict)
+    model = load_models(opt)
+    run_models(opt, model)
 
 def load_models(opt):
     global model, sampler
@@ -196,6 +196,10 @@ def load_models(opt):
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
     model = model.to(device)
 
+    return model
+
+
+def run_models(opt, model):
     if opt.plms:
         sampler = PLMSSampler(model)
     elif opt.dpm:
@@ -203,20 +207,16 @@ def load_models(opt):
     else:
         sampler = DDIMSampler(model)
 
-    return {"model": model, "sampler": sampler}
-
-
-def run_models(opt, model, sampler):
     seed_everything(opt.seed)
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
     os.makedirs(opt.outdir, exist_ok=True)
     outpath = opt.outdir
 
-    print("Creating invisible watermark encoder (see https://github.com/ShieldMnt/invisible-watermark)...")
-    wm = "SDV2"
-    wm_encoder = WatermarkEncoder()
-    wm_encoder.set_watermark('bytes', wm.encode('utf-8'))
+    # print("Creating invisible watermark encoder (see https://github.com/ShieldMnt/invisible-watermark)...")
+    # wm = "SDV2"
+    # wm_encoder = WatermarkEncoder()
+    # wm_encoder.set_watermark('bytes', wm.encode('utf-8'))
 
     batch_size = opt.n_samples
     n_rows = opt.n_rows if opt.n_rows > 0 else batch_size
@@ -272,12 +272,13 @@ def run_models(opt, model, sampler):
                     for x_sample in x_samples:
                         x_sample = 255. * rearrange(x_sample.cpu().numpy(), 'c h w -> h w c')
                         img = Image.fromarray(x_sample.astype(np.uint8))
-                        img = put_watermark(img, wm_encoder)
-                        img.save(os.path.join(sample_path, f"{base_count:05}.png"))
-                        base_count += 1
-                        sample_count += 1
+                        all_samples.append(img)
+                        # img = put_watermark(img, wm_encoder)
+                        # img.save(os.path.join(sample_path, f"{base_count:05}.png"))
+                        # base_count += 1
+                        # sample_count += 1
 
-                    all_samples.append(x_samples)
+                    # all_samples.append(x_samples)
 
             # # additionally, save as grid
             # grid = torch.stack(all_samples, 0)
@@ -291,8 +292,9 @@ def run_models(opt, model, sampler):
             # grid.save(os.path.join(outpath, f'grid-{grid_count:04}.png'))
             # grid_count += 1
 
-    print(f"Your samples are ready and waiting for you here: \n{outpath} \n"
-          f" \nEnjoy.")
+    # print(f"Your samples are ready and waiting for you here: \n{outpath} \n"
+    #       f" \nEnjoy.")
+    return all_samples
 
 
 if __name__ == "__main__":

@@ -71,10 +71,10 @@ def inpaint(sampler, image, mask, prompt, seed, scale, ddim_steps, num_samples=1
         "cuda") if torch.cuda.is_available() else torch.device("cpu")
     model = sampler.model
 
-    print("Creating invisible watermark encoder (see https://github.com/ShieldMnt/invisible-watermark)...")
-    wm = "SDV2"
-    wm_encoder = WatermarkEncoder()
-    wm_encoder.set_watermark('bytes', wm.encode('utf-8'))
+    # print("Creating invisible watermark encoder (see https://github.com/ShieldMnt/invisible-watermark)...")
+    # wm = "SDV2"
+    # wm_encoder = WatermarkEncoder()
+    # wm_encoder.set_watermark('bytes', wm.encode('utf-8'))
 
     prng = np.random.RandomState(seed)
     start_code = prng.randn(num_samples, 4, h // 8, w // 8)
@@ -125,7 +125,7 @@ def inpaint(sampler, image, mask, prompt, seed, scale, ddim_steps, num_samples=1
                              min=0.0, max=1.0)
 
         result = result.cpu().numpy().transpose(0, 2, 3, 1) * 255
-    return [put_watermark(Image.fromarray(img.astype(np.uint8)), wm_encoder) for img in result]
+    return [put_watermark(Image.fromarray(img.astype(np.uint8)), wm_encoder=None) for img in result]
 
 def pad_image(input_image):
     pad_w, pad_h = np.max(((2, 2), np.ceil(
@@ -156,40 +156,40 @@ def predict(input_image, prompt, ddim_steps, num_samples, scale, seed):
 
     return result
 
+if __name__ == '__main__':
+    sampler = initialize_model(sys.argv[1], sys.argv[2])
 
-sampler = initialize_model(sys.argv[1], sys.argv[2])
+    block = gr.Blocks().queue()
+    with block:
+        with gr.Row():
+            gr.Markdown("## Stable Diffusion Inpainting")
 
-block = gr.Blocks().queue()
-with block:
-    with gr.Row():
-        gr.Markdown("## Stable Diffusion Inpainting")
+        with gr.Row():
+            with gr.Column():
+                input_image = gr.Image(source='upload', tool='sketch', type="pil")
+                prompt = gr.Textbox(label="Prompt")
+                run_button = gr.Button(label="Run")
+                with gr.Accordion("Advanced options", open=False):
+                    num_samples = gr.Slider(
+                        label="Images", minimum=1, maximum=4, value=4, step=1)
+                    ddim_steps = gr.Slider(label="Steps", minimum=1,
+                                           maximum=50, value=45, step=1)
+                    scale = gr.Slider(
+                        label="Guidance Scale", minimum=0.1, maximum=30.0, value=10, step=0.1
+                    )
+                    seed = gr.Slider(
+                        label="Seed",
+                        minimum=0,
+                        maximum=2147483647,
+                        step=1,
+                        randomize=True,
+                    )
+            with gr.Column():
+                gallery = gr.Gallery(label="Generated images", show_label=False).style(
+                    grid=[2], height="auto")
 
-    with gr.Row():
-        with gr.Column():
-            input_image = gr.Image(source='upload', tool='sketch', type="pil")
-            prompt = gr.Textbox(label="Prompt")
-            run_button = gr.Button(label="Run")
-            with gr.Accordion("Advanced options", open=False):
-                num_samples = gr.Slider(
-                    label="Images", minimum=1, maximum=4, value=4, step=1)
-                ddim_steps = gr.Slider(label="Steps", minimum=1,
-                                       maximum=50, value=45, step=1)
-                scale = gr.Slider(
-                    label="Guidance Scale", minimum=0.1, maximum=30.0, value=10, step=0.1
-                )
-                seed = gr.Slider(
-                    label="Seed",
-                    minimum=0,
-                    maximum=2147483647,
-                    step=1,
-                    randomize=True,
-                )
-        with gr.Column():
-            gallery = gr.Gallery(label="Generated images", show_label=False).style(
-                grid=[2], height="auto")
-
-    run_button.click(fn=predict, inputs=[
-                     input_image, prompt, ddim_steps, num_samples, scale, seed], outputs=[gallery])
+        run_button.click(fn=predict, inputs=[
+                         input_image, prompt, ddim_steps, num_samples, scale, seed], outputs=[gallery])
 
 
-block.launch()
+    block.launch()
