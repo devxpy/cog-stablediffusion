@@ -6,10 +6,12 @@ set -x
 
 docker rm -f $NAME
 
-docker run -v $PWD/checkpoints:/src/checkpoints \
+docker run -d --restart always \
+  --name $NAME \
+  -v $PWD/checkpoints:/src/checkpoints \
   -v $HOME/.cache/huggingface:/root/.cache/huggingface \
-  -p 5020:5000 \
+  -p 5011:5000 \
   --gpus all \
-  stablediffusion2:v2
+  $NAME
 
 docker logs -f $NAME
