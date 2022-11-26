@@ -4,6 +4,8 @@ NAME=stablediffusion2
 
 set -x
 
+docker build . -t $NAME
+
 docker rm -f $NAME
 
 docker run -d --restart always \

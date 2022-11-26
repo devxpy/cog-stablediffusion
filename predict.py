@@ -32,13 +32,13 @@ class Predictor(BasePredictor):
             config="configs/stable-diffusion/v2-inpainting-inference.yaml",
             ckpt="checkpoints/512-inpainting-ema.ckpt"
         )
-        self.inpainting_models["model"] = inpainting.sampler.model
+        self.inpainting_models = vars(inpainting.sampler)
 
         superresolution.sampler = superresolution.initialize_model(
             config="configs/stable-diffusion/x4-upscaling.yaml",
             ckpt="checkpoints/x4-upscaler-ema.ckpt"
         )
-        self.upscaling_models["model"] = superresolution.sampler.model
+        self.upscaling_models = vars(superresolution.sampler)
 
         move_models(self.models, "cpu")
         move_models(self.inpainting_models, "cpu")
@@ -127,10 +127,10 @@ class Predictor(BasePredictor):
             with models_in_gpu(self.upscaling_models):
                 results = [
                     superresolution.predict(
-                        input_image=input_image,
+                        input_image=ImageOps.contain(input_image, (512, 512)),
                         prompt=prompt,
                         steps=upscaling_inference_steps,
-                        num_samples=num_outputs,
+                        num_samples=1,
                         scale=guidance_scale,
                         seed=seed,
                         eta=0,
