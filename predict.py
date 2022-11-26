@@ -10,9 +10,10 @@ from cog import BasePredictor, Path, File
 
 
 class Predictor(BasePredictor):
-    models = {}
-    inpainting_models = {}
-    upscaling_models = {}
+    model_512 = {}
+    model_768 = {}
+    inpainting_model = {}
+    upscaling_model = {}
 
     def _setup(self):
         """Load the model into memory to make running multiple predictions efficient"""
@@ -21,9 +22,16 @@ class Predictor(BasePredictor):
         from scripts import txt2img, img2img
         from scripts.gradio import inpainting, superresolution
 
-        self.models["model"] = txt2img.load_models(
+        self.model_512["model"] = txt2img.load_models(
             txt2img.parse_args([
                 "--ckpt", "checkpoints/768-v-ema.ckpt",
+                "--config", "configs/stable-diffusion/v2-inference-v.yaml"
+            ])
+        )
+
+        self.model_768["model"] = txt2img.load_models(
+            txt2img.parse_args([
+                "--ckpt", "checkpoints/512-base-ema.ckpt",
                 "--config", "configs/stable-diffusion/v2-inference-v.yaml"
             ])
         )
@@ -32,17 +40,18 @@ class Predictor(BasePredictor):
             config="configs/stable-diffusion/v2-inpainting-inference.yaml",
             ckpt="checkpoints/512-inpainting-ema.ckpt"
         )
-        self.inpainting_models = vars(inpainting.sampler)
+        self.inpainting_model = vars(inpainting.sampler)
 
         superresolution.sampler = superresolution.initialize_model(
             config="configs/stable-diffusion/x4-upscaling.yaml",
             ckpt="checkpoints/x4-upscaler-ema.ckpt"
         )
-        self.upscaling_models = vars(superresolution.sampler)
+        self.upscaling_model = vars(superresolution.sampler)
 
-        move_models(self.models, "cpu")
-        move_models(self.inpainting_models, "cpu")
-        move_models(self.upscaling_models, "cpu")
+        move_models(self.model_512, "cpu")
+        move_models(self.model_768, "cpu")
+        move_models(self.inpainting_model, "cpu")
+        move_models(self.upscaling_model, "cpu")
 
 
     def predict(
@@ -63,18 +72,18 @@ class Predictor(BasePredictor):
     ) -> typing.List[File]:
         """Run a single prediction on the model"""
 
+        if not self.model_512:
+            self._setup()
+
         from scripts import txt2img, img2img
         from scripts.gradio import inpainting, superresolution
-
-        if not self.models:
-            self._setup()
 
         if not seed:
             seed = int.from_bytes(os.urandom(2), "big")
         print(f"Using seed: {seed}")
 
         if edit_image:
-            with models_in_gpu(self.inpainting_models):
+            with models_in_gpu(self.inpainting_model):
                 results = inpainting.predict(
                     input_image={
                         "image": Image.open(edit_image),
@@ -88,7 +97,7 @@ class Predictor(BasePredictor):
                 )
         else:
             args = [
-                "--ckpt", "checkpoints/768-v-ema.ckpt",
+                "--ckpt", "None",
                 "--config", "configs/stable-diffusion/v2-inference-v.yaml",
                 "--prompt", prompt,
                 "--n_iter", "1",
@@ -119,12 +128,17 @@ class Predictor(BasePredictor):
 
             shutil.rmtree('outputs/', ignore_errors=True)
 
+            if width > 512 or height > 512:
+                model_dict = self.model_768
+            else:
+                model_dict = self.model_512
+
             print("running with args:", " ".join(map(str, args)))
-            with models_in_gpu(self.models):
-                results = module.run_models(module.parse_args(args), **self.models)
+            with models_in_gpu(model_dict):
+                results = module.run_models(module.parse_args(args), **model_dict)
 
         if upscaling_inference_steps:
-            with models_in_gpu(self.upscaling_models):
+            with models_in_gpu(self.upscaling_model):
                 results = [
                     superresolution.predict(
                         input_image=ImageOps.contain(input_image, (512, 512)),
