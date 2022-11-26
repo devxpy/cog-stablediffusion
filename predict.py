@@ -25,7 +25,7 @@ class Predictor(BasePredictor):
         self.model_512["model"] = txt2img.load_models(
             txt2img.parse_args([
                 "--ckpt", "checkpoints/512-base-ema.ckpt",
-                "--config", "configs/stable-diffusion/v2-inference-v.yaml"
+                "--config", "configs/stable-diffusion/v2-inference.yaml"
             ])
         )
 
@@ -98,7 +98,7 @@ class Predictor(BasePredictor):
         else:
             args = [
                 "--ckpt", "None",
-                "--config", "configs/stable-diffusion/v2-inference-v.yaml",
+                "--config", "None",
                 "--prompt", prompt,
                 "--n_iter", "1",
                 "--n_samples", str(num_outputs),
