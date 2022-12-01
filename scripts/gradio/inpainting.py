@@ -66,7 +66,7 @@ def make_batch_sd(
     return batch
 
 
-def inpaint(sampler, image, mask, prompt, seed, scale, ddim_steps, num_samples=1, w=512, h=512):
+def inpaint(sampler, image, mask, prompt, seed, scale, ddim_steps, num_samples=1, w=512, h=512, negative_prompt=""):
     device = torch.device(
         "cuda") if torch.cuda.is_available() else torch.device("cpu")
     model = sampler.model
@@ -104,7 +104,7 @@ def inpaint(sampler, image, mask, prompt, seed, scale, ddim_steps, num_samples=1
         cond = {"c_concat": [c_cat], "c_crossattn": [c]}
 
         # uncond cond
-        uc_cross = model.get_unconditional_conditioning(num_samples, "")
+        uc_cross = model.get_unconditional_conditioning(num_samples, negative_prompt)
         uc_full = {"c_concat": [c_cat], "c_crossattn": [uc_cross]}
 
         shape = [model.channels, h // 8, w // 8]
@@ -134,7 +134,7 @@ def pad_image(input_image):
         np.pad(np.array(input_image), ((0, pad_h), (0, pad_w), (0, 0)), mode='edge'))
     return im_padded
 
-def predict(input_image, prompt, ddim_steps, num_samples, scale, seed):
+def predict(input_image, prompt, ddim_steps, num_samples, scale, seed, negative_prompt=""):
     init_image = input_image["image"].convert("RGB")
     init_mask = input_image["mask"].convert("RGB")
     image = pad_image(init_image) # resize to integer multiple of 32
@@ -151,7 +151,8 @@ def predict(input_image, prompt, ddim_steps, num_samples, scale, seed):
         scale=scale,
         ddim_steps=ddim_steps,
         num_samples=num_samples,
-        h=height, w=width
+        h=height, w=width,
+        negative_prompt=negative_prompt,
     )
 
     return result

@@ -186,6 +186,13 @@ def parse_args(args=None):
         choices=["full", "autocast"],
         default="autocast"
     )
+    parser.add_argument(
+        "--negative_prompt",
+        type=str,
+        nargs="?",
+        default="",
+        help="the negative prompt to render"
+    )
 
     opt = parser.parse_args(args)
     return opt
@@ -253,7 +260,7 @@ def run_models(opt, model):
                     for prompts in tqdm(data, desc="data"):
                         uc = None
                         if opt.scale != 1.0:
-                            uc = model.get_learned_conditioning(batch_size * [""])
+                            uc = model.get_learned_conditioning(batch_size * [opt.negative_prompt])
                         if isinstance(prompts, tuple):
                             prompts = list(prompts)
                         c = model.get_learned_conditioning(prompts)

@@ -19,7 +19,7 @@ class Predictor(BasePredictor):
         """Load the model into memory to make running multiple predictions efficient"""
         print("running setup...")
 
-        from scripts import txt2img, img2img
+        from scripts import txt2img
         from scripts.gradio import inpainting, superresolution
 
         self.model_512["model"] = txt2img.load_models(
@@ -69,6 +69,7 @@ class Predictor(BasePredictor):
         mask_image: Path = None,
         sampler: str = "ddim",
         upscaling_inference_steps: int = 0,
+        negative_prompt: str = "",
     ) -> typing.List[File]:
         """Run a single prediction on the model"""
 
@@ -94,6 +95,7 @@ class Predictor(BasePredictor):
                     num_samples=num_outputs,
                     scale=guidance_scale,
                     seed=seed,
+                    negative_prompt=negative_prompt,
                 )
         else:
             args = [
@@ -104,6 +106,7 @@ class Predictor(BasePredictor):
                 "--n_samples", str(num_outputs),
                 "--scale", str(guidance_scale),
                 "--seed", str(seed),
+                "--negative_prompt", negative_prompt,
             ]
 
             if sampler == "plms":
@@ -149,6 +152,7 @@ class Predictor(BasePredictor):
                         seed=seed,
                         eta=0,
                         noise_level=20,
+                        negative_prompt=negative_prompt,
                     )[0]
                     for input_image in results
                 ]

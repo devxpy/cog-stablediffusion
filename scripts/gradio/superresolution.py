@@ -53,7 +53,7 @@ def make_noise_augmentation(model, batch, noise_level=None):
     return x_aug, noise_level
 
 
-def paint(sampler, image, prompt, seed, scale, h, w, steps, num_samples=1, callback=None, eta=0., noise_level=None):
+def paint(sampler, image, prompt, seed, scale, h, w, steps, num_samples=1, callback=None, eta=0., noise_level=None, negative_prompt=""):
     device = torch.device(
         "cuda") if torch.cuda.is_available() else torch.device("cpu")
     model = sampler.model
@@ -85,7 +85,7 @@ def paint(sampler, image, prompt, seed, scale, h, w, steps, num_samples=1, callb
             # cond
             cond = {"c_concat": [c_cat], "c_crossattn": [c]}
             # uncond cond
-            uc_cross = model.get_unconditional_conditioning(num_samples, "")
+            uc_cross = model.get_unconditional_conditioning(num_samples, negative_prompt)
             uc_full = {"c_concat": [c_cat], "c_crossattn": [uc_cross]}
         elif isinstance(model, LatentUpscaleDiffusion):
             x_augment, noise_level = make_noise_augmentation(
@@ -127,7 +127,7 @@ def pad_image(input_image):
     return im_padded
 
 
-def predict(input_image, prompt, steps, num_samples, scale, seed, eta, noise_level):
+def predict(input_image, prompt, steps, num_samples, scale, seed, eta, noise_level, negative_prompt=""):
     init_image = input_image.convert("RGB")
     image = pad_image(init_image)  # resize to integer multiple of 32
     width, height = image.size
@@ -144,7 +144,8 @@ def predict(input_image, prompt, steps, num_samples, scale, seed, eta, noise_lev
         h=height, w=width, steps=steps,
         num_samples=num_samples,
         callback=None,
-        noise_level=noise_level
+        noise_level=noise_level,
+        negative_prompt=negative_prompt,
     )
     return result
 
