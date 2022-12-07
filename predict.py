@@ -24,14 +24,16 @@ class Predictor(BasePredictor):
 
         self.model_512["model"] = txt2img.load_models(
             txt2img.parse_args([
-                "--ckpt", "checkpoints/512-base-ema.ckpt",
+                # "--ckpt", "checkpoints/512-base-ema.ckpt",
+                "--ckpt", "checkpoints/v2-1_512-ema-pruned.ckpt",
                 "--config", "configs/stable-diffusion/v2-inference.yaml"
             ])
         )
 
         self.model_768["model"] = txt2img.load_models(
             txt2img.parse_args([
-                "--ckpt", "checkpoints/768-v-ema.ckpt",
+                # "--ckpt", "checkpoints/768-v-ema.ckpt",
+                "--ckpt", "checkpoints/v2-1_768-ema-pruned.ckpt",
                 "--config", "configs/stable-diffusion/v2-inference-v.yaml"
             ])
         )
